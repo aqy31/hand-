@@ -1,25 +1,3 @@
-// --- On-Screen Error Logging for Mobile Debugging ---
-window.addEventListener('error', function(e) {
-    const errorDiv = document.getElementById('debug-error-console') || document.createElement('div');
-    errorDiv.id = 'debug-error-console';
-    errorDiv.style.position = 'fixed';
-    errorDiv.style.bottom = '10px';
-    errorDiv.style.left = '10px';
-    errorDiv.style.right = '10px';
-    errorDiv.style.background = 'rgba(220, 38, 38, 0.95)';
-    errorDiv.style.color = 'white';
-    errorDiv.style.padding = '12px';
-    errorDiv.style.borderRadius = '8px';
-    errorDiv.style.zIndex = '10000';
-    errorDiv.style.fontSize = '12px';
-    errorDiv.style.fontFamily = 'monospace';
-    errorDiv.style.maxHeight = '150px';
-    errorDiv.style.overflowY = 'auto';
-    errorDiv.style.border = '1px solid #fca5a5';
-    errorDiv.innerText = `Error: ${e.message}\nAt: ${e.filename}:${e.lineno}`;
-    document.body.appendChild(errorDiv);
-});
-
 // --- UI and State Management ---
 const homeScreen = document.getElementById('home_screen');
 const drawingMode = document.getElementById('drawing_mode');
@@ -138,12 +116,14 @@ function updateStatus(msg, type) {
 }
 
 function calculateDistance(p1, p2) {
+    if (!p1 || !p2) return 0;
     const dx = p1.x - p2.x;
     const dy = p1.y - p2.y;
     return Math.sqrt(dx * dx + dy * dy);
 }
 
 function calculateDistance3D(p1, p2) {
+    if (!p1 || !p2) return 0;
     const dx = p1.x - p2.x;
     const dy = p1.y - p2.y;
     const dz = p1.z - p2.z;
@@ -151,8 +131,10 @@ function calculateDistance3D(p1, p2) {
 }
 
 function isFist(landmarks) {
+    if (!landmarks || landmarks.length < 21) return false;
     const wrist = landmarks[0];
     const isFolded = (tipIdx, mcpIdx) => {
+        if (!landmarks[tipIdx] || !landmarks[mcpIdx] || !wrist) return false;
         // Use 3D distance and 0.85 tolerance to prevent false-positives when hand is open but tilted
         return calculateDistance3D(landmarks[tipIdx], wrist) < calculateDistance3D(landmarks[mcpIdx], wrist) * 0.85;
     };
@@ -186,8 +168,10 @@ clearBtn.addEventListener('click', () => {
 });
 
 function handleDrawingMode(landmarks) {
+    if (!landmarks || landmarks.length < 21) return;
     const indexFinger = landmarks[8];
     const thumb = landmarks[4];
+    if (!indexFinger || !thumb) return;
     
     if (isFist(landmarks)) {
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -364,6 +348,7 @@ function animateThreeJs() {
 
 function handle3DMode(landmarks) {
     if (!loadedModel) return;
+    if (!landmarks || landmarks.length < 21) return;
     
     if (isFist(landmarks)) {
         loadedModel.visible = false;
@@ -376,6 +361,7 @@ function handle3DMode(landmarks) {
     const indexMcp = landmarks[5];
     const middleMcp = landmarks[9];
     const pinkyMcp = landmarks[17];
+    if (!wrist || !indexMcp || !middleMcp || !pinkyMcp) return;
     
     // Anchor at the exact center of the palm (averaging wrist and base knuckles)
     // This places the model deep and centered inside the palm as if being held

@@ -6,6 +6,30 @@
     <title>تتبع اليد: رسم وثلاثي الأبعاد</title>
     <link rel="stylesheet" href="style.css">
     
+    <!-- On-screen error logger for compile/runtime errors -->
+    <script>
+        window.addEventListener('error', function(e) {
+            const errorDiv = document.getElementById('debug-error-console') || document.createElement('div');
+            errorDiv.id = 'debug-error-console';
+            errorDiv.style.position = 'fixed';
+            errorDiv.style.bottom = '10px';
+            errorDiv.style.left = '10px';
+            errorDiv.style.right = '10px';
+            errorDiv.style.background = 'rgba(220, 38, 38, 0.95)';
+            errorDiv.style.color = 'white';
+            errorDiv.style.padding = '12px';
+            errorDiv.style.borderRadius = '8px';
+            errorDiv.style.zIndex = '10000';
+            errorDiv.style.fontSize = '12px';
+            errorDiv.style.fontFamily = 'monospace';
+            errorDiv.style.maxHeight = '150px';
+            errorDiv.style.overflowY = 'auto';
+            errorDiv.style.border = '1px solid #fca5a5';
+            errorDiv.innerText = "Error: " + e.message + "\nAt: " + e.filename + ":" + e.lineno;
+            document.body.appendChild(errorDiv);
+        });
+    </script>
+    
     <!-- MediaPipe dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -83,6 +107,6 @@
     </div>
 
     <!-- Main Logic -->
-    <script src="script.js?v=7"></script>
+    <script src="script.js?v=8"></script>
 </body>
 </html>
