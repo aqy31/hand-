@@ -86,12 +86,12 @@ function showScreen(screen) {
     }
     updateVideoMirror();
     
-    if(screen === 'home') homeScreen.classList.add('active');
-    if(screen === 'drawing') drawingMode.classList.add('active');
-    if(screen === '3d') mode3d.classList.add('active');
-    if(screen === 'ar') modeAr.classList.add('active');
-    if(screen === 'ar_ground') modeArGround.classList.add('active');
-    if(screen === 'ar_locked') modeArLocked.classList.add('active');
+    if(screen === 'home' && homeScreen) homeScreen.classList.add('active');
+    if(screen === 'drawing' && drawingMode) drawingMode.classList.add('active');
+    if(screen === '3d' && mode3d) mode3d.classList.add('active');
+    if(screen === 'ar' && modeAr) modeAr.classList.add('active');
+    if(screen === 'ar_ground' && modeArGround) modeArGround.classList.add('active');
+    if(screen === 'ar_locked' && modeArLocked) modeArLocked.classList.add('active');
     
     currentMode = screen;
 }
@@ -104,99 +104,111 @@ function updateVideoMirror() {
     }
 }
 
-btnDrawing.addEventListener('click', () => {
-    // Play/activate video element within user gesture for Safari compatibility
-    videoElement.play().catch(() => {});
-    if (currentFacingMode !== 'user') {
-        currentFacingMode = 'user';
-        updateVideoMirror();
-        startWebcam(true);
-    } else if (!isWebcamStarted) {
-        startWebcam();
-    }
-    showScreen('drawing');
-});
+if (btnDrawing) {
+    btnDrawing.addEventListener('click', () => {
+        // Play/activate video element within user gesture for Safari compatibility
+        if (videoElement) videoElement.play().catch(() => {});
+        if (currentFacingMode !== 'user') {
+            currentFacingMode = 'user';
+            updateVideoMirror();
+            startWebcam(true);
+        } else if (!isWebcamStarted) {
+            startWebcam();
+        }
+        showScreen('drawing');
+    });
+}
 
-btn3d.addEventListener('click', () => {
-    videoElement.play().catch(() => {});
-    if (currentFacingMode !== 'user') {
-        currentFacingMode = 'user';
-        updateVideoMirror();
-        startWebcam(true);
-    } else if (!isWebcamStarted) {
-        startWebcam();
-    }
-    showScreen('3d');
-    if (!isThreeJsInitialized) initThreeJs();
-});
+if (btn3d) {
+    btn3d.addEventListener('click', () => {
+        if (videoElement) videoElement.play().catch(() => {});
+        if (currentFacingMode !== 'user') {
+            currentFacingMode = 'user';
+            updateVideoMirror();
+            startWebcam(true);
+        } else if (!isWebcamStarted) {
+            startWebcam();
+        }
+        showScreen('3d');
+        if (!isThreeJsInitialized) initThreeJs();
+    });
+}
 
-btnAr.addEventListener('click', () => {
-    videoElement.play().catch(() => {});
-    // Default to back camera for AR mode to see the floor/environment
-    if (currentFacingMode !== 'environment') {
-        currentFacingMode = 'environment';
-        updateVideoMirror();
-        startWebcam(true);
-    } else if (!isWebcamStarted) {
-        startWebcam();
-    }
-    showScreen('ar');
-    if (!isThreeJsInitialized) initThreeJs();
-});
+if (btnAr) {
+    btnAr.addEventListener('click', () => {
+        if (videoElement) videoElement.play().catch(() => {});
+        // Default to back camera for AR mode to see the floor/environment
+        if (currentFacingMode !== 'environment') {
+            currentFacingMode = 'environment';
+            updateVideoMirror();
+            startWebcam(true);
+        } else if (!isWebcamStarted) {
+            startWebcam();
+        }
+        showScreen('ar');
+        if (!isThreeJsInitialized) initThreeJs();
+    });
+}
 
-btnArGround.addEventListener('click', () => {
-    videoElement.play().catch(() => {});
-    // Default to back camera for Ground AR mode
-    if (currentFacingMode !== 'environment') {
-        currentFacingMode = 'environment';
-        updateVideoMirror();
-        startWebcam(true);
-    } else if (!isWebcamStarted) {
-        startWebcam();
-    }
-    
-    // Request permission for DeviceOrientation on iOS
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
-            .then(response => {
-                if (response === 'granted') {
-                    window.addEventListener('deviceorientation', handleOrientation);
-                }
-            })
-            .catch(err => {
-                console.error("DeviceOrientation permission rejected:", err);
-            });
-    } else {
-        window.addEventListener('deviceorientation', handleOrientation);
-    }
-    
-    showScreen('ar_ground');
-    if (!isThreeJsInitialized) initThreeJs();
-});
+if (btnArGround) {
+    btnArGround.addEventListener('click', () => {
+        if (videoElement) videoElement.play().catch(() => {});
+        // Default to back camera for Ground AR mode
+        if (currentFacingMode !== 'environment') {
+            currentFacingMode = 'environment';
+            updateVideoMirror();
+            startWebcam(true);
+        } else if (!isWebcamStarted) {
+            startWebcam();
+        }
+        
+        // Request permission for DeviceOrientation on iOS
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(response => {
+                    if (response === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    }
+                })
+                .catch(err => {
+                    console.error("DeviceOrientation permission rejected:", err);
+                });
+        } else {
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+        
+        showScreen('ar_ground');
+        if (!isThreeJsInitialized) initThreeJs();
+    });
+}
 
-btnArLocked.addEventListener('click', () => {
-    videoElement.play().catch(() => {});
-    // Default to back camera for Locked AR mode (similar to AR mode)
-    if (currentFacingMode !== 'environment') {
-        currentFacingMode = 'environment';
-        updateVideoMirror();
-        startWebcam(true);
-    } else if (!isWebcamStarted) {
-        startWebcam();
-    }
-    showScreen('ar_locked');
-    if (!isThreeJsInitialized) initThreeJs();
-});
+if (btnArLocked) {
+    btnArLocked.addEventListener('click', () => {
+        if (videoElement) videoElement.play().catch(() => {});
+        // Default to back camera for Locked AR mode (similar to AR mode)
+        if (currentFacingMode !== 'environment') {
+            currentFacingMode = 'environment';
+            updateVideoMirror();
+            startWebcam(true);
+        } else if (!isWebcamStarted) {
+            startWebcam();
+        }
+        showScreen('ar_locked');
+        if (!isThreeJsInitialized) initThreeJs();
+    });
+}
 
-backFromDrawing.addEventListener('click', () => showScreen('home'));
-backFrom3d.addEventListener('click', () => showScreen('home'));
-backFromAr.addEventListener('click', () => showScreen('home'));
-backFromArGround.addEventListener('click', () => {
-    window.removeEventListener('deviceorientation', handleOrientation);
-    deviceOrientation = null;
-    showScreen('home');
-});
-backFromArLocked.addEventListener('click', () => showScreen('home'));
+if (backFromDrawing) backFromDrawing.addEventListener('click', () => showScreen('home'));
+if (backFrom3d) backFrom3d.addEventListener('click', () => showScreen('home'));
+if (backFromAr) backFromAr.addEventListener('click', () => showScreen('home'));
+if (backFromArGround) {
+    backFromArGround.addEventListener('click', () => {
+        window.removeEventListener('deviceorientation', handleOrientation);
+        deviceOrientation = null;
+        showScreen('home');
+    });
+}
+if (backFromArLocked) backFromArLocked.addEventListener('click', () => showScreen('home'));
 
 // --- Webcam and MediaPipe Shared Setup ---
 const videoElement = document.getElementById('webcam');
@@ -258,15 +270,23 @@ let currentY = null;
 const SMOOTHING_FACTOR = 0.15;
 
 function resizeCanvas() {
-    canvasElement.width = window.innerWidth;
-    canvasElement.height = window.innerHeight;
+    if (canvasElement) {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
 }
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+if (canvasElement) {
+    resizeCanvas();
+}
 
-clearBtn.addEventListener('click', () => {
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-});
+if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+        if (canvasCtx && canvasElement) {
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        }
+    });
+}
 
 function handleDrawingMode(landmarks) {
     if (!landmarks || landmarks.length < 21) return;
