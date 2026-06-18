@@ -363,8 +363,16 @@ function handle3DMode(landmarks) {
     targetModelX = pos.x;
     targetModelY = pos.y;
     
-    const handSize = Math.sqrt(Math.pow(middleMcp.x - wrist.x, 2) + Math.pow(middleMcp.y - wrist.y, 2));
-    targetScale = Math.max(0.2, handSize * 4); 
+    // Scale: Calculate Bounding Box of the hand to ensure stable scale regardless of rotation
+    let minX = 1, minY = 1, maxX = 0, maxY = 0;
+    for (let i = 0; i < 21; i++) {
+        if (landmarks[i].x < minX) minX = landmarks[i].x;
+        if (landmarks[i].x > maxX) maxX = landmarks[i].x;
+        if (landmarks[i].y < minY) minY = landmarks[i].y;
+        if (landmarks[i].y > maxY) maxY = landmarks[i].y;
+    }
+    const boxDiag = Math.sqrt(Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2));
+    targetScale = Math.max(0.2, boxDiag * 2.5); // Adjust multiplier to feel natural
     
     // Invert X for basis vectors if mirrored
     const sign = isMirrored ? -1 : 1;
