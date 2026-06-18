@@ -13,8 +13,6 @@ const backFromDrawing = document.getElementById('back_from_drawing');
 const backFrom3d = document.getElementById('back_from_3d');
 const backFromAr = document.getElementById('back_from_ar');
 
-const switchCameraBtn = document.getElementById('switch_camera');
-
 let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 
@@ -95,12 +93,6 @@ btnAr.addEventListener('click', () => {
 backFromDrawing.addEventListener('click', () => showScreen('home'));
 backFrom3d.addEventListener('click', () => showScreen('home'));
 backFromAr.addEventListener('click', () => showScreen('home'));
-
-switchCameraBtn.addEventListener('click', () => {
-    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    updateVideoMirror();
-    startWebcam(true); // Force restart
-});
 
 // --- Webcam and MediaPipe Shared Setup ---
 const videoElement = document.getElementById('webcam');
@@ -249,15 +241,22 @@ function initThreeJs() {
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 10;
 
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
     threejsContainer.appendChild(renderer.domElement);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    // Better Lighting to see shape clearly
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
     scene.add(hemiLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
     directionalLight.position.set(5, 10, 10);
     scene.add(directionalLight);
+    
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    fillLight.position.set(-5, 0, -5);
+    scene.add(fillLight);
 
     const loader = new THREE.GLTFLoader();
     updateStatus('جاري تحميل المجسم (qwqee.glb)...', 'loading');
@@ -341,17 +340,19 @@ function handle3DMode(landmarks) {
     
     const wrist = landmarks[0];
     const indexMcp = landmarks[5];
-    const middleMcp = landmarks[9];
+    const middleMcp = landmarks[9]; // This is the knuckle of the middle finger (perfect grip center)
     const pinkyMcp = landmarks[17];
     
-    const palmX = (wrist.x + middleMcp.x) / 2;
-    const palmY = (wrist.y + middleMcp.y) / 2;
+    // Anchor exactly at the center of the grip (middle knuckle) so it feels held inside the hand
+    const palmX = middleMcp.x;
+    const palmY = middleMcp.y;
     
-    // Handle mirroring logic: Front camera is mirrored, back is not. 
-    // Except in 3D mode where we always mirror.
+    // Handle mirroring logic:
+    // Some devices require inverted logic. If the user complains about inverted tracking, we flip the mapping.
     const isMirrored = (currentMode === 'ar' && currentFacingMode !== 'user') ? false : true;
     
-    const ndcX = (isMirrored ? ((1 - palmX) * 2 - 1) : (palmX * 2 - 1));
+    // Flipped the logic based on user feedback to fix "Right is Left"
+    const ndcX = (isMirrored ? (palmX * 2 - 1) : ((1 - palmX) * 2 - 1));
     const ndcY = -(palmY * 2) + 1;
     
     const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
