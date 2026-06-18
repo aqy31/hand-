@@ -3,17 +3,35 @@ const homeScreen = document.getElementById('home_screen');
 const drawingMode = document.getElementById('drawing_mode');
 const mode3d = document.getElementById('3d_mode');
 const modeAr = document.getElementById('ar_mode');
+const modeArGround = document.getElementById('ar_ground_mode');
 const threejsContainer = document.getElementById('threejs_container');
 
 const btnDrawing = document.getElementById('btn_drawing');
 const btn3d = document.getElementById('btn_3d');
 const btnAr = document.getElementById('btn_ar');
+const btnArGround = document.getElementById('btn_ar_ground');
 
 const backFromDrawing = document.getElementById('back_from_drawing');
 const backFrom3d = document.getElementById('back_from_3d');
 const backFromAr = document.getElementById('back_from_ar');
+const backFromArGround = document.getElementById('back_from_ar_ground');
 
-let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
+const statusArGround = document.getElementById('status_ar_ground');
+
+let deviceOrientation = null;
+function handleOrientation(event) {
+    deviceOrientation = event;
+}
+
+function resetCamera() {
+    if (camera) {
+        camera.position.set(0, 0, 10);
+        camera.rotation.set(0, 0, 0);
+        camera.quaternion.set(0, 0, 0, 1);
+    }
+}
+
+let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar', 'ar_ground'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 let activeFacingMode = 'user';
 let smoothedLandmarks = null;
@@ -25,9 +43,12 @@ function showScreen(screen) {
     drawingMode.classList.remove('active');
     mode3d.classList.remove('active');
     modeAr.classList.remove('active');
+    if (modeArGround) modeArGround.classList.remove('active');
+    
+    resetCamera();
     
     // Manage ThreeJS container visibility
-    if (screen === '3d' || screen === 'ar') {
+    if (screen === '3d' || screen === 'ar' || screen === 'ar_ground') {
         threejsContainer.style.display = 'block';
     } else {
         threejsContainer.style.display = 'none';
@@ -35,7 +56,7 @@ function showScreen(screen) {
     }
     
     // Manage AR Video Background
-    if (screen === 'ar') {
+    if (screen === 'ar' || screen === 'ar_ground') {
         videoElement.classList.add('ar-video');
     } else {
         videoElement.classList.remove('ar-video');
@@ -46,6 +67,7 @@ function showScreen(screen) {
     if(screen === 'drawing') drawingMode.classList.add('active');
     if(screen === '3d') mode3d.classList.add('active');
     if(screen === 'ar') modeAr.classList.add('active');
+    if(screen === 'ar_ground') modeArGround.classList.add('active');
     
     currentMode = screen;
 }
@@ -94,9 +116,43 @@ btnAr.addEventListener('click', () => {
     if (!isThreeJsInitialized) initThreeJs();
 });
 
+btnArGround.addEventListener('click', () => {
+    // Default to back camera for Ground AR mode
+    if (currentFacingMode !== 'environment') {
+        currentFacingMode = 'environment';
+        updateVideoMirror();
+        startWebcam(true);
+    } else if (!isWebcamStarted) {
+        startWebcam();
+    }
+    
+    // Request permission for DeviceOrientation on iOS
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+            .then(response => {
+                if (response === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                }
+            })
+            .catch(err => {
+                console.error("DeviceOrientation permission rejected:", err);
+            });
+    } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+    }
+    
+    showScreen('ar_ground');
+    if (!isThreeJsInitialized) initThreeJs();
+});
+
 backFromDrawing.addEventListener('click', () => showScreen('home'));
 backFrom3d.addEventListener('click', () => showScreen('home'));
 backFromAr.addEventListener('click', () => showScreen('home'));
+backFromArGround.addEventListener('click', () => {
+    window.removeEventListener('deviceorientation', handleOrientation);
+    deviceOrientation = null;
+    showScreen('home');
+});
 
 // --- Webcam and MediaPipe Shared Setup ---
 const videoElement = document.getElementById('webcam');
@@ -108,7 +164,7 @@ let isWebcamStarted = false;
 let currentStream = null;
 
 function updateStatus(msg, type) {
-    [statusDrawing, status3d, statusAr].forEach(el => {
+    [statusDrawing, status3d, statusAr, statusArGround].forEach(el => {
         if(el) {
             el.textContent = msg;
             el.className = `status-indicator ${type}`;
@@ -242,8 +298,11 @@ let isThreeJsInitialized = false;
 let scene, camera, renderer, loadedModel;
 let targetModelX = 0;
 let targetModelY = 0;
+let targetModelZ = 0;
 let currentModelX = 0;
 let currentModelY = 0;
+let currentModelZ = 0;
+let wasModelVisible = false;
 
 let targetQuaternion = new THREE.Quaternion();
 let currentQuaternion = new THREE.Quaternion();
@@ -283,19 +342,24 @@ function initThreeJs() {
     loader.load(
         'qwqee.glb',
         function (gltf) {
-            loadedModel = gltf.scene;
+            const model = gltf.scene;
             
-            const box = new THREE.Box3().setFromObject(loadedModel);
+            const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
             
             const normalizedScale = 3 / maxDim;
-            loadedModel.scale.set(normalizedScale, normalizedScale, normalizedScale);
+            model.scale.set(normalizedScale, normalizedScale, normalizedScale);
             
-            loadedModel.position.x = -center.x * normalizedScale;
-            loadedModel.position.y = -center.y * normalizedScale;
-            loadedModel.position.z = -center.z * normalizedScale;
+            // Translate the model so its bounding box center is at (0, 0, 0) of the aligner
+            model.position.x = -center.x * normalizedScale;
+            model.position.y = -center.y * normalizedScale;
+            model.position.z = -center.z * normalizedScale;
+            
+            // Create an aligner group to rotate the model around its center
+            const aligner = new THREE.Group();
+            aligner.add(model);
             
             // Align the model's dimensions automatically to match the hand:
             // Longest dimension -> Y (hand length), Medium -> X (hand width), Shortest -> Z (thickness)
@@ -305,28 +369,29 @@ function initThreeJs() {
             
             if (dx >= dy && dx >= dz) {
                 if (dy >= dz) {
-                    loadedModel.rotation.z = Math.PI / 2;
+                    aligner.rotation.z = Math.PI / 2;
                 } else {
-                    loadedModel.rotation.z = Math.PI / 2;
-                    loadedModel.rotation.y = Math.PI / 2;
+                    aligner.rotation.z = Math.PI / 2;
+                    aligner.rotation.y = Math.PI / 2;
                 }
             } else if (dy >= dx && dy >= dz) {
                 if (dx >= dz) {
-                    // Already aligned
+                    // Already aligned Y-longest, X-medium, Z-shortest
                 } else {
-                    loadedModel.rotation.y = Math.PI / 2;
+                    aligner.rotation.y = Math.PI / 2;
                 }
             } else {
                 if (dx >= dy) {
-                    loadedModel.rotation.x = Math.PI / 2;
+                    aligner.rotation.x = Math.PI / 2;
                 } else {
-                    loadedModel.rotation.x = Math.PI / 2;
-                    loadedModel.rotation.y = Math.PI / 2;
+                    aligner.rotation.x = Math.PI / 2;
+                    aligner.rotation.y = Math.PI / 2;
                 }
             }
             
+            // Create the main wrapper group that tracks hand position/rotation
             const wrapper = new THREE.Group();
-            wrapper.add(loadedModel);
+            wrapper.add(aligner);
             wrapper.visible = false;
             
             scene.add(wrapper);
@@ -357,11 +422,48 @@ function animateThreeJs() {
     
     const is3dMode = currentMode === '3d' || currentMode === 'ar';
     
-    if (loadedModel && is3dMode && loadedModel.visible) {
+    if (currentMode === 'ar_ground') {
+        if (loadedModel) {
+            loadedModel.visible = true;
+            loadedModel.position.set(0, -1.5, -4);
+            loadedModel.quaternion.set(0, 0, 0, 1);
+            
+            const slider = document.getElementById('groundScaleSlider');
+            const scaleVal = slider ? parseFloat(slider.value) : 1.0;
+            loadedModel.scale.set(scaleVal, scaleVal, scaleVal);
+        }
+        
+        camera.position.set(0, 0, 0); // Position camera at origin for look-around
+        
+        if (deviceOrientation) {
+            const pitch = THREE.MathUtils.degToRad(deviceOrientation.beta - 90);
+            const yaw = THREE.MathUtils.degToRad(deviceOrientation.alpha);
+            const roll = THREE.MathUtils.degToRad(deviceOrientation.gamma);
+            
+            const euler = new THREE.Euler();
+            euler.set(pitch, yaw, roll, 'YXZ');
+            camera.quaternion.setFromEuler(euler);
+        }
+        
+        renderer.render(scene, camera);
+    } else if (loadedModel && is3dMode && loadedModel.visible) {
+        // Snap instantly to hand position when hand is first detected to prevent flying across screen
+        if (!wasModelVisible) {
+            currentModelX = targetModelX;
+            currentModelY = targetModelY;
+            currentModelZ = targetModelZ;
+            currentQuaternion.copy(targetQuaternion);
+            currentScale = targetScale;
+            wasModelVisible = true;
+        }
+        
         currentModelX += (targetModelX - currentModelX) * 0.08; // Butter-smooth slow interpolation to completely eliminate position jitter
         currentModelY += (targetModelY - currentModelY) * 0.08;
+        currentModelZ += (targetModelZ - currentModelZ) * 0.08;
+        
         loadedModel.position.x = currentModelX;
         loadedModel.position.y = currentModelY;
+        loadedModel.position.z = currentModelZ;
         
         currentQuaternion.slerp(targetQuaternion, 0.04); // Extra-smooth slow rotation tracking to remove any rotation shaking
         loadedModel.quaternion.copy(currentQuaternion);
@@ -371,6 +473,7 @@ function animateThreeJs() {
         
         renderer.render(scene, camera);
     } else if (loadedModel && is3dMode && !loadedModel.visible) {
+        wasModelVisible = false;
         renderer.render(scene, camera);
     }
 }
@@ -405,35 +508,41 @@ function handle3DMode(landmarks) {
     const ndcX = isMirrored ? (((1 - palmX) * 2) - 1) : ((palmX * 2) - 1);
     const ndcY = -(palmY * 2) + 1;
     
-    const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
-    vector.unproject(camera);
-    const dir = vector.sub(camera.position).normalize();
-    const distance = -camera.position.z / dir.z;
-    const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-    
-    // Model tracks the hand in BOTH 3D and AR modes
-    targetModelX = pos.x;
-    targetModelY = pos.y;
-    
     // Scale: Use the rigid palm length (wrist to middle finger MCP)
     // This keeps the size completely stable and prevents shrinking when curling fingers
     const palmLength = calculateDistance3D(wrist, middleMcp);
-    targetScale = Math.max(0.15, palmLength * 4.5); // Fits snugly inside the palm
+    
+    // Calculate 3D distance dynamically based on palm length to allow true forward/backward depth movement.
+    // If palmLength is 0.15 (normal), distance is 7.5 units from camera, bringing it closer to the user.
+    const distance = 1.12 / Math.max(0.05, palmLength);
+    
+    const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
+    vector.unproject(camera);
+    const dir = vector.sub(camera.position).normalize();
+    const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+    
+    // Model tracks the hand in BOTH 3D and AR modes, including depth (Z)
+    targetModelX = pos.x;
+    targetModelY = pos.y;
+    targetModelZ = pos.z;
+    
+    // Stable scale constant. Scaling is handled naturally by 3D perspective depth!
+    targetScale = 0.45;
     
     // Flip the sign of relative X components for direction vectors if mirrored
     const xSign = isMirrored ? -1 : 1;
-    const zScale = 4.0; // Amplify Z depth difference to enable full 3D rotation feel
     
+    // Rigid 3D space vectors with no depth warping, to match palm-front and hand-back perfectly
     const vUp = new THREE.Vector3(
         xSign * (middleMcp.x - wrist.x), 
         -(middleMcp.y - wrist.y), 
-        -zScale * (middleMcp.z - wrist.z)
+        -(middleMcp.z - wrist.z)
     ).normalize();
     
     const vRight = new THREE.Vector3(
         xSign * (pinkyMcp.x - indexMcp.x), 
         -(pinkyMcp.y - indexMcp.y), 
-        -zScale * (pinkyMcp.z - indexMcp.z)
+        -(pinkyMcp.z - indexMcp.z)
     ).normalize();
     
     const vForward = new THREE.Vector3().crossVectors(vRight, vUp).normalize();
