@@ -38,6 +38,8 @@ const backFromAr = document.getElementById('back_from_ar');
 let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 let activeFacingMode = 'user';
+let smoothedLandmarks = null;
+const LANDMARK_SMOOTHING = 0.25; // Butter-smooth filtering factor to remove camera jitter
 
 function showScreen(screen) {
     homeScreen.classList.remove('active');
@@ -343,15 +345,15 @@ function animateThreeJs() {
     const is3dMode = currentMode === '3d' || currentMode === 'ar';
     
     if (loadedModel && is3dMode && loadedModel.visible) {
-        currentModelX += (targetModelX - currentModelX) * 0.1;
-        currentModelY += (targetModelY - currentModelY) * 0.1;
+        currentModelX += (targetModelX - currentModelX) * 0.2; // Slightly faster position tracking
+        currentModelY += (targetModelY - currentModelY) * 0.2;
         loadedModel.position.x = currentModelX;
         loadedModel.position.y = currentModelY;
         
-        currentQuaternion.slerp(targetQuaternion, 0.08);
+        currentQuaternion.slerp(targetQuaternion, 0.15); // Snappy, responsive rotation tracking
         loadedModel.quaternion.copy(currentQuaternion);
         
-        currentScale += (targetScale - currentScale) * 0.1;
+        currentScale += (targetScale - currentScale) * 0.2;
         loadedModel.scale.set(currentScale, currentScale, currentScale);
         
         renderer.render(scene, camera);
@@ -375,10 +377,10 @@ function handle3DMode(landmarks) {
     const middleMcp = landmarks[9];
     const pinkyMcp = landmarks[17];
     
-    // Anchor at the center of the palm (midpoint of wrist and fingers)
-    // This is the most stable and natural point for holding objects
-    const palmX = (wrist.x + middleMcp.x) / 2;
-    const palmY = (wrist.y + middleMcp.y) / 2;
+    // Anchor at the exact center of the palm (averaging wrist and base knuckles)
+    // This places the model deep and centered inside the palm as if being held
+    const palmX = (wrist.x + indexMcp.x + middleMcp.x + pinkyMcp.x) / 4;
+    const palmY = (wrist.y + indexMcp.y + middleMcp.y + pinkyMcp.y) / 4;
     
     // Check if the video is currently mirrored
     const isMirrored = videoElement.classList.contains('mirrored');
@@ -398,16 +400,10 @@ function handle3DMode(landmarks) {
     targetModelX = pos.x;
     targetModelY = pos.y;
     
-    // Scale: Calculate Bounding Box of the hand to ensure stable scale regardless of rotation
-    let minX = 1, minY = 1, maxX = 0, maxY = 0;
-    for (let i = 0; i < 21; i++) {
-        if (landmarks[i].x < minX) minX = landmarks[i].x;
-        if (landmarks[i].x > maxX) maxX = landmarks[i].x;
-        if (landmarks[i].y < minY) minY = landmarks[i].y;
-        if (landmarks[i].y > maxY) maxY = landmarks[i].y;
-    }
-    const boxDiag = Math.sqrt(Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2));
-    targetScale = Math.max(0.2, boxDiag * 2.5); // Adjust multiplier to feel natural
+    // Scale: Use the rigid palm length (wrist to middle finger MCP)
+    // This keeps the size completely stable and prevents shrinking when curling fingers
+    const palmLength = calculateDistance3D(wrist, middleMcp);
+    targetScale = Math.max(0.15, palmLength * 4.5); // Fits snugly inside the palm
     
     // Flip the sign of relative X components for direction vectors if mirrored
     const xSign = isMirrored ? -1 : 1;
@@ -449,12 +445,24 @@ hands.onResults((results) => {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         
+        // Apply Exponential Moving Average (EMA) to landmarks to eliminate camera jitter at source
+        if (!smoothedLandmarks) {
+            smoothedLandmarks = landmarks.map(l => ({ x: l.x, y: l.y, z: l.z }));
+        } else {
+            for (let i = 0; i < 21; i++) {
+                smoothedLandmarks[i].x += (landmarks[i].x - smoothedLandmarks[i].x) * LANDMARK_SMOOTHING;
+                smoothedLandmarks[i].y += (landmarks[i].y - smoothedLandmarks[i].y) * LANDMARK_SMOOTHING;
+                smoothedLandmarks[i].z += (landmarks[i].z - smoothedLandmarks[i].z) * LANDMARK_SMOOTHING;
+            }
+        }
+        
         if (currentMode === 'drawing') {
-            handleDrawingMode(landmarks);
+            handleDrawingMode(smoothedLandmarks);
         } else if (currentMode === '3d' || currentMode === 'ar') {
-            handle3DMode(landmarks);
+            handle3DMode(smoothedLandmarks);
         }
     } else {
+        smoothedLandmarks = null;
         if (currentMode === 'drawing') {
             resetDrawingState();
         } else if ((currentMode === '3d' || currentMode === 'ar') && loadedModel) {
