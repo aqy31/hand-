@@ -114,6 +114,9 @@ body {
     height: 100vh;
     object-fit: cover;
     visibility: visible !important;
+    opacity: 1 !important;
+    left: 0 !important;
+    top: 0 !important;
     z-index: 0;
 }
 
