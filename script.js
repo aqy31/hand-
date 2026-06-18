@@ -348,11 +348,10 @@ function handle3DMode(landmarks) {
     const palmY = middleMcp.y;
     
     // Handle mirroring logic:
-    // Some devices require inverted logic. If the user complains about inverted tracking, we flip the mapping.
     const isMirrored = (currentMode === 'ar' && currentFacingMode !== 'user') ? false : true;
     
-    // Flipped the logic based on user feedback to fix "Right is Left"
-    const ndcX = (isMirrored ? (palmX * 2 - 1) : ((1 - palmX) * 2 - 1));
+    // Mathematically correct mapping for mirrored and unmirrored screens
+    const ndcX = (isMirrored ? ((1 - palmX) * 2 - 1) : (palmX * 2 - 1));
     const ndcY = -(palmY * 2) + 1;
     
     const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
@@ -361,8 +360,15 @@ function handle3DMode(landmarks) {
     const distance = -camera.position.z / dir.z;
     const pos = camera.position.clone().add(dir.multiplyScalar(distance));
     
-    targetModelX = pos.x;
-    targetModelY = pos.y;
+    if (currentMode === 'ar') {
+        // In AR mode, model follows the hand
+        targetModelX = pos.x;
+        targetModelY = pos.y;
+    } else {
+        // In 3D mode (Button 2), model stays perfectly centered
+        targetModelX = 0;
+        targetModelY = 0;
+    }
     
     // Scale: Calculate Bounding Box of the hand to ensure stable scale regardless of rotation
     let minX = 1, minY = 1, maxX = 0, maxY = 0;
@@ -438,17 +444,17 @@ async function startWebcam(forceRestart = false) {
         currentStream.getTracks().forEach(track => track.stop());
     }
     
-    isWebcamStarted = true;
     updateStatus('جاري تشغيل الكاميرا...', 'loading');
     
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-                facingMode: currentFacingMode,
+                facingMode: { ideal: currentFacingMode },
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             }
         });
+        isWebcamStarted = true;
         currentStream = stream;
         videoElement.srcObject = stream;
         
