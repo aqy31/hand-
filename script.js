@@ -13,6 +13,8 @@ const backFromDrawing = document.getElementById('back_from_drawing');
 const backFrom3d = document.getElementById('back_from_3d');
 const backFromAr = document.getElementById('back_from_ar');
 
+const switchCameraBtn = document.getElementById('switch_camera');
+
 let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 
@@ -93,6 +95,12 @@ btnAr.addEventListener('click', () => {
 backFromDrawing.addEventListener('click', () => showScreen('home'));
 backFrom3d.addEventListener('click', () => showScreen('home'));
 backFromAr.addEventListener('click', () => showScreen('home'));
+
+switchCameraBtn.addEventListener('click', () => {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    updateVideoMirror();
+    startWebcam(true); // Force restart
+});
 
 // --- Webcam and MediaPipe Shared Setup ---
 const videoElement = document.getElementById('webcam');
@@ -340,15 +348,18 @@ function handle3DMode(landmarks) {
     
     const wrist = landmarks[0];
     const indexMcp = landmarks[5];
-    const middleMcp = landmarks[9]; // This is the knuckle of the middle finger (perfect grip center)
+    const middleMcp = landmarks[9];
     const pinkyMcp = landmarks[17];
     
-    // Anchor exactly at the center of the grip (middle knuckle) so it feels held inside the hand
-    const palmX = middleMcp.x;
-    const palmY = middleMcp.y;
+    // Anchor at the center of the palm (midpoint of wrist and fingers)
+    // This is the most stable and natural point for holding objects
+    const palmX = (wrist.x + middleMcp.x) / 2;
+    const palmY = (wrist.y + middleMcp.y) / 2;
     
-    // Handle mirroring logic:
-    const isMirrored = (currentMode === 'ar' && currentFacingMode !== 'user') ? false : true;
+    // Mirroring logic: 
+    // In AR mode, NEVER mirror if it's the back camera (environment). 
+    // Only mirror if it's the front camera (user).
+    const isMirrored = (currentFacingMode === 'user');
     
     // Mathematically correct mapping for mirrored and unmirrored screens
     const ndcX = (isMirrored ? ((1 - palmX) * 2 - 1) : (palmX * 2 - 1));
