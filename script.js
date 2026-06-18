@@ -17,7 +17,8 @@ let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 let activeFacingMode = 'user';
 let smoothedLandmarks = null;
-const LANDMARK_SMOOTHING = 0.25; // Butter-smooth filtering factor to remove camera jitter
+const LANDMARK_SMOOTHING_XY = 0.25; // High responsiveness for position
+const LANDMARK_SMOOTHING_Z = 0.05;  // Heavy filtering for depth to eliminate rotation jitter
 
 function showScreen(screen) {
     homeScreen.classList.remove('active');
@@ -296,6 +297,34 @@ function initThreeJs() {
             loadedModel.position.y = -center.y * normalizedScale;
             loadedModel.position.z = -center.z * normalizedScale;
             
+            // Align the model's dimensions automatically to match the hand:
+            // Longest dimension -> Y (hand length), Medium -> X (hand width), Shortest -> Z (thickness)
+            const dx = size.x;
+            const dy = size.y;
+            const dz = size.z;
+            
+            if (dx >= dy && dx >= dz) {
+                if (dy >= dz) {
+                    loadedModel.rotation.z = Math.PI / 2;
+                } else {
+                    loadedModel.rotation.z = Math.PI / 2;
+                    loadedModel.rotation.y = Math.PI / 2;
+                }
+            } else if (dy >= dx && dy >= dz) {
+                if (dx >= dz) {
+                    // Already aligned
+                } else {
+                    loadedModel.rotation.y = Math.PI / 2;
+                }
+            } else {
+                if (dx >= dy) {
+                    loadedModel.rotation.x = Math.PI / 2;
+                } else {
+                    loadedModel.rotation.x = Math.PI / 2;
+                    loadedModel.rotation.y = Math.PI / 2;
+                }
+            }
+            
             const wrapper = new THREE.Group();
             wrapper.add(loadedModel);
             wrapper.visible = false;
@@ -329,15 +358,15 @@ function animateThreeJs() {
     const is3dMode = currentMode === '3d' || currentMode === 'ar';
     
     if (loadedModel && is3dMode && loadedModel.visible) {
-        currentModelX += (targetModelX - currentModelX) * 0.2; // Slightly faster position tracking
-        currentModelY += (targetModelY - currentModelY) * 0.2;
+        currentModelX += (targetModelX - currentModelX) * 0.08; // Butter-smooth slow interpolation to completely eliminate position jitter
+        currentModelY += (targetModelY - currentModelY) * 0.08;
         loadedModel.position.x = currentModelX;
         loadedModel.position.y = currentModelY;
         
-        currentQuaternion.slerp(targetQuaternion, 0.15); // Snappy, responsive rotation tracking
+        currentQuaternion.slerp(targetQuaternion, 0.04); // Extra-smooth slow rotation tracking to remove any rotation shaking
         loadedModel.quaternion.copy(currentQuaternion);
         
-        currentScale += (targetScale - currentScale) * 0.2;
+        currentScale += (targetScale - currentScale) * 0.08;
         loadedModel.scale.set(currentScale, currentScale, currentScale);
         
         renderer.render(scene, camera);
@@ -432,13 +461,23 @@ hands.onResults((results) => {
         const landmarks = results.multiHandLandmarks[0];
         
         // Apply Exponential Moving Average (EMA) to landmarks to eliminate camera jitter at source
-        if (!smoothedLandmarks) {
-            smoothedLandmarks = landmarks.map(l => ({ x: l.x, y: l.y, z: l.z }));
+        const len = landmarks.length;
+        if (!smoothedLandmarks || smoothedLandmarks.length !== len) {
+            smoothedLandmarks = [];
+            for (let i = 0; i < len; i++) {
+                smoothedLandmarks.push({
+                    x: landmarks[i].x,
+                    y: landmarks[i].y,
+                    z: landmarks[i].z
+                });
+            }
         } else {
-            for (let i = 0; i < 21; i++) {
-                smoothedLandmarks[i].x += (landmarks[i].x - smoothedLandmarks[i].x) * LANDMARK_SMOOTHING;
-                smoothedLandmarks[i].y += (landmarks[i].y - smoothedLandmarks[i].y) * LANDMARK_SMOOTHING;
-                smoothedLandmarks[i].z += (landmarks[i].z - smoothedLandmarks[i].z) * LANDMARK_SMOOTHING;
+            for (let i = 0; i < len; i++) {
+                if (landmarks[i]) {
+                    smoothedLandmarks[i].x += (landmarks[i].x - smoothedLandmarks[i].x) * LANDMARK_SMOOTHING_XY;
+                    smoothedLandmarks[i].y += (landmarks[i].y - smoothedLandmarks[i].y) * LANDMARK_SMOOTHING_XY;
+                    smoothedLandmarks[i].z += (landmarks[i].z - smoothedLandmarks[i].z) * LANDMARK_SMOOTHING_Z;
+                }
             }
         }
         
