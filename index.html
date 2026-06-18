@@ -6,9 +6,9 @@
     <title>تتبع اليد: رسم وثلاثي الأبعاد</title>
     <link rel="stylesheet" href="style.css">
     
-    <!-- On-screen error logger for compile/runtime errors -->
+    <!-- On-screen error logger for compile/runtime/promise errors -->
     <script>
-        window.addEventListener('error', function(e) {
+        function logErrorToScreen(message, source, lineno) {
             const errorDiv = document.getElementById('debug-error-console') || document.createElement('div');
             errorDiv.id = 'debug-error-console';
             errorDiv.style.position = 'fixed';
@@ -25,8 +25,20 @@
             errorDiv.style.maxHeight = '150px';
             errorDiv.style.overflowY = 'auto';
             errorDiv.style.border = '1px solid #fca5a5';
-            errorDiv.innerText = "Error: " + e.message + "\nAt: " + e.filename + ":" + e.lineno;
+            
+            const existingText = errorDiv.innerText;
+            const newError = "Error: " + message + (source ? "\nAt: " + source + ":" + lineno : "");
+            errorDiv.innerText = existingText ? existingText + "\n---\n" + newError : newError;
             document.body.appendChild(errorDiv);
+        }
+
+        window.addEventListener('error', function(e) {
+            logErrorToScreen(e.message, e.filename, e.lineno);
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            const reason = e.reason || {};
+            logErrorToScreen("Promise Rejection: " + (reason.message || reason) + (reason.stack ? "\nStack: " + reason.stack : ""), "", "");
         });
     </script>
     
@@ -53,6 +65,7 @@
                     <button id="btn_3d" class="btn btn-large">🧊 وضع 3D</button>
                     <button id="btn_ar" class="btn btn-large">🌐 وضع الواقع المعزز (AR)</button>
                     <button id="btn_ar_ground" class="btn btn-large">📍 وضع التثبيت الأرضي (Static AR)</button>
+                    <button id="btn_ar_locked" class="btn btn-large">🔒 وضع التثبيت باليد (Locked AR)</button>
                 </div>
                 <div id="status_home" class="status-indicator mt-4" style="display:none;"></div>
             </div>
@@ -118,12 +131,22 @@
                 <div id="status_ar_ground" class="status-indicator loading mt-2">جاري تحميل الكاميرا...</div>
             </div>
         </div>
+
+        <!-- AR Locked Mode -->
+        <div id="ar_locked_mode" class="screen">
+            <div class="controls panel-glass">
+                <h2>التثبيت باليد (Locked AR)</h2>
+                <p style="font-size: 0.9rem; margin-bottom: 10px;">المجسم مثبت في كف يدك تماماً ويتحرك معها بدون أي اهتزاز أو تأخير.</p>
+                <button id="back_from_ar_locked" class="btn btn-secondary mt-2">العودة للرئيسية</button>
+                <div id="status_ar_locked" class="status-indicator loading mt-2">جاري تحميل الكاميرا...</div>
+            </div>
+        </div>
         
         <!-- Shared Container for Three.js Canvas -->
         <div id="threejs_container"></div>
     </div>
 
     <!-- Main Logic -->
-    <script src="script.js?v=12"></script>
+    <script src="hand_tracker.js?v=1"></script>
 </body>
 </html>

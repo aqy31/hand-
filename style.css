@@ -100,9 +100,12 @@ body {
 
 .default-hidden-video {
     position: absolute;
-    width: 0;
-    height: 0;
-    visibility: hidden;
+    width: 640px;
+    height: 480px;
+    opacity: 0.0001;
+    pointer-events: none;
+    left: -1000px;
+    top: -1000px;
 }
 
 /* AR Video Background */
