@@ -1,3 +1,25 @@
+// --- On-Screen Error Logging for Mobile Debugging ---
+window.addEventListener('error', function(e) {
+    const errorDiv = document.getElementById('debug-error-console') || document.createElement('div');
+    errorDiv.id = 'debug-error-console';
+    errorDiv.style.position = 'fixed';
+    errorDiv.style.bottom = '10px';
+    errorDiv.style.left = '10px';
+    errorDiv.style.right = '10px';
+    errorDiv.style.background = 'rgba(220, 38, 38, 0.95)';
+    errorDiv.style.color = 'white';
+    errorDiv.style.padding = '12px';
+    errorDiv.style.borderRadius = '8px';
+    errorDiv.style.zIndex = '10000';
+    errorDiv.style.fontSize = '12px';
+    errorDiv.style.fontFamily = 'monospace';
+    errorDiv.style.maxHeight = '150px';
+    errorDiv.style.overflowY = 'auto';
+    errorDiv.style.border = '1px solid #fca5a5';
+    errorDiv.innerText = `Error: ${e.message}\nAt: ${e.filename}:${e.lineno}`;
+    document.body.appendChild(errorDiv);
+});
+
 // --- UI and State Management ---
 const homeScreen = document.getElementById('home_screen');
 const drawingMode = document.getElementById('drawing_mode');
@@ -119,10 +141,18 @@ function calculateDistance(p1, p2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+function calculateDistance3D(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    const dz = p1.z - p2.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
 function isFist(landmarks) {
     const wrist = landmarks[0];
     const isFolded = (tipIdx, mcpIdx) => {
-        return calculateDistance(landmarks[tipIdx], wrist) < calculateDistance(landmarks[mcpIdx], wrist);
+        // Use 3D distance and 0.85 tolerance to prevent false-positives when hand is open but tilted
+        return calculateDistance3D(landmarks[tipIdx], wrist) < calculateDistance3D(landmarks[mcpIdx], wrist) * 0.85;
     };
     return isFolded(8, 5) && isFolded(12, 9) && isFolded(16, 13) && isFolded(20, 17);
 }
@@ -381,17 +411,18 @@ function handle3DMode(landmarks) {
     
     // Flip the sign of relative X components for direction vectors if mirrored
     const xSign = isMirrored ? -1 : 1;
+    const zScale = 4.0; // Amplify Z depth difference to enable full 3D rotation feel
     
     const vUp = new THREE.Vector3(
         xSign * (middleMcp.x - wrist.x), 
         -(middleMcp.y - wrist.y), 
-        -(middleMcp.z - wrist.z)
+        -zScale * (middleMcp.z - wrist.z)
     ).normalize();
     
     const vRight = new THREE.Vector3(
         xSign * (pinkyMcp.x - indexMcp.x), 
         -(pinkyMcp.y - indexMcp.y), 
-        -(pinkyMcp.z - indexMcp.z)
+        -zScale * (pinkyMcp.z - indexMcp.z)
     ).normalize();
     
     const vForward = new THREE.Vector3().crossVectors(vRight, vUp).normalize();
