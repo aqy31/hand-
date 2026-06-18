@@ -13,8 +13,6 @@ const backFromDrawing = document.getElementById('back_from_drawing');
 const backFrom3d = document.getElementById('back_from_3d');
 const backFromAr = document.getElementById('back_from_ar');
 
-const switchCameraBtn = document.getElementById('switch_camera');
-
 let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 
@@ -95,12 +93,6 @@ btnAr.addEventListener('click', () => {
 backFromDrawing.addEventListener('click', () => showScreen('home'));
 backFrom3d.addEventListener('click', () => showScreen('home'));
 backFromAr.addEventListener('click', () => showScreen('home'));
-
-switchCameraBtn.addEventListener('click', () => {
-    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    updateVideoMirror();
-    startWebcam(true); // Force restart
-});
 
 // --- Webcam and MediaPipe Shared Setup ---
 const videoElement = document.getElementById('webcam');
@@ -356,13 +348,9 @@ function handle3DMode(landmarks) {
     const palmX = (wrist.x + middleMcp.x) / 2;
     const palmY = (wrist.y + middleMcp.y) / 2;
     
-    // Mirroring logic: 
-    // In AR mode, NEVER mirror if it's the back camera (environment). 
-    // Only mirror if it's the front camera (user).
-    const isMirrored = (currentFacingMode === 'user');
-    
-    // Mathematically correct mapping for mirrored and unmirrored screens
-    const ndcX = (isMirrored ? ((1 - palmX) * 2 - 1) : (palmX * 2 - 1));
+    // MediaPipe Hands outputs X coordinates mirrored by default. 
+    // We universally un-mirror them (1 - palmX) for ThreeJS.
+    const ndcX = ((1 - palmX) * 2) - 1;
     const ndcY = -(palmY * 2) + 1;
     
     const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
@@ -371,15 +359,9 @@ function handle3DMode(landmarks) {
     const distance = -camera.position.z / dir.z;
     const pos = camera.position.clone().add(dir.multiplyScalar(distance));
     
-    if (currentMode === 'ar') {
-        // In AR mode, model follows the hand
-        targetModelX = pos.x;
-        targetModelY = pos.y;
-    } else {
-        // In 3D mode (Button 2), model stays perfectly centered
-        targetModelX = 0;
-        targetModelY = 0;
-    }
+    // Model tracks the hand in BOTH 3D and AR modes
+    targetModelX = pos.x;
+    targetModelY = pos.y;
     
     // Scale: Calculate Bounding Box of the hand to ensure stable scale regardless of rotation
     let minX = 1, minY = 1, maxX = 0, maxY = 0;
@@ -392,17 +374,14 @@ function handle3DMode(landmarks) {
     const boxDiag = Math.sqrt(Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2));
     targetScale = Math.max(0.2, boxDiag * 2.5); // Adjust multiplier to feel natural
     
-    // Invert X for basis vectors if mirrored
-    const sign = isMirrored ? -1 : 1;
-    
     const vUp = new THREE.Vector3(
-        sign * (middleMcp.x - wrist.x), 
+        -(middleMcp.x - wrist.x), 
         -(middleMcp.y - wrist.y), 
         -(middleMcp.z - wrist.z)
     ).normalize();
     
     const vRight = new THREE.Vector3(
-        sign * (pinkyMcp.x - indexMcp.x), 
+        -(pinkyMcp.x - indexMcp.x), 
         -(pinkyMcp.y - indexMcp.y), 
         -(pinkyMcp.z - indexMcp.z)
     ).normalize();
