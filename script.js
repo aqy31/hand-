@@ -15,6 +15,7 @@ const backFromAr = document.getElementById('back_from_ar');
 
 let currentMode = 'home'; // 'home', 'drawing', '3d', 'ar'
 let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
+let activeFacingMode = 'user';
 
 function showScreen(screen) {
     homeScreen.classList.remove('active');
@@ -47,7 +48,7 @@ function showScreen(screen) {
 }
 
 function updateVideoMirror() {
-    if (currentFacingMode === 'user' || currentMode !== 'ar') {
+    if (activeFacingMode === 'user') {
         videoElement.classList.add('mirrored');
     } else {
         videoElement.classList.remove('mirrored');
@@ -166,8 +167,9 @@ function handleDrawingMode(landmarks) {
         }, 1000);
     }
     
-    // Always mirror in drawing mode
-    const targetX = (1 - indexFinger.x) * canvasElement.width;
+    // Calculate position based on video mirroring
+    const isMirrored = videoElement.classList.contains('mirrored');
+    const targetX = isMirrored ? ((1 - indexFinger.x) * canvasElement.width) : (indexFinger.x * canvasElement.width);
     const targetY = indexFinger.y * canvasElement.height;
     
     if (currentX === null || currentY === null) {
@@ -348,9 +350,12 @@ function handle3DMode(landmarks) {
     const palmX = (wrist.x + middleMcp.x) / 2;
     const palmY = (wrist.y + middleMcp.y) / 2;
     
-    // MediaPipe Hands outputs X coordinates mirrored by default. 
-    // We universally un-mirror them (1 - palmX) for ThreeJS.
-    const ndcX = ((1 - palmX) * 2) - 1;
+    // Check if the video is currently mirrored
+    const isMirrored = videoElement.classList.contains('mirrored');
+    
+    // Calculate X coordinate in Normalized Device Coordinates (NDC)
+    // If mirrored, flip the X axis. If not, use standard mapping.
+    const ndcX = isMirrored ? (((1 - palmX) * 2) - 1) : ((palmX * 2) - 1);
     const ndcY = -(palmY * 2) + 1;
     
     const vector = new THREE.Vector3(ndcX, ndcY, 0.5);
@@ -374,14 +379,17 @@ function handle3DMode(landmarks) {
     const boxDiag = Math.sqrt(Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2));
     targetScale = Math.max(0.2, boxDiag * 2.5); // Adjust multiplier to feel natural
     
+    // Flip the sign of relative X components for direction vectors if mirrored
+    const xSign = isMirrored ? -1 : 1;
+    
     const vUp = new THREE.Vector3(
-        -(middleMcp.x - wrist.x), 
+        xSign * (middleMcp.x - wrist.x), 
         -(middleMcp.y - wrist.y), 
         -(middleMcp.z - wrist.z)
     ).normalize();
     
     const vRight = new THREE.Vector3(
-        -(pinkyMcp.x - indexMcp.x), 
+        xSign * (pinkyMcp.x - indexMcp.x), 
         -(pinkyMcp.y - indexMcp.y), 
         -(pinkyMcp.z - indexMcp.z)
     ).normalize();
@@ -447,6 +455,12 @@ async function startWebcam(forceRestart = false) {
         isWebcamStarted = true;
         currentStream = stream;
         videoElement.srcObject = stream;
+        
+        // Query active facingMode from stream track settings
+        const track = stream.getVideoTracks()[0];
+        const settings = track && track.getSettings ? track.getSettings() : {};
+        activeFacingMode = settings.facingMode || currentFacingMode;
+        updateVideoMirror();
         
         videoElement.onloadedmetadata = () => {
             videoElement.play();
