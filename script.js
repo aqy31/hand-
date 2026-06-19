@@ -23,6 +23,7 @@ const drawingMode = document.getElementById('drawing_mode');
 const mode3d = document.getElementById('3d_mode');
 const modeAr = document.getElementById('ar_mode');
 const modeArGround = document.getElementById('ar_ground_mode');
+const modeArLocked = document.getElementById('ar_locked_mode');
 const threejsContainer = document.getElementById('threejs_container');
 
 const btnDrawing = document.getElementById('btn_drawing');
